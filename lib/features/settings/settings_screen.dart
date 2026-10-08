@@ -356,7 +356,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       children: [
                         Row(
                           children: [
-                            Icon(LucideIcons.github,
+                            Icon(LucideIcons.gitBranch,
                                 size: 16, color: c.textMid),
                             const SizedBox(width: 6),
                             Text('GitHub Gist', style: t.h2),

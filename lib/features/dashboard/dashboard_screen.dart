@@ -365,10 +365,11 @@ class _Header extends StatelessWidget {
           tooltip: '更新订阅',
           onTap: () {
             HapticFeedback.selectionClick();
-            ShadSonner.of(context)?.show(
-              const ShadToast(
-                title: Text('更新订阅'),
-                description: Text('正在从远端拉取最新节点列表…'),
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                behavior: SnackBarBehavior.floating,
+                content: Text('正在从远端拉取最新节点列表…'),
+                duration: Duration(seconds: 2),
               ),
             );
           },
