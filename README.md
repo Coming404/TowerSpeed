@@ -47,17 +47,19 @@ flutter build ios --release --no-codesign   # 出 Payload 打 zip（巨魔可装
 lib/
   main.dart               # ShadApp + GoRouter
   theme/                  # 设计 tokens：颜色 / 字体 / 间距 / 动效
-  core/models/            # SpeedTestConfig / ProxyNode / TestResult / HistorySession
+  core/models/            # SpeedTestConfig / ProxyNode / StreamingUnlock / SubscriptionSource
   core/mock_data.dart     # 演示数据
-  router.dart             # StatefulShellRoute 四分支
-  shared/widgets/         # GlassCard / SpeedRing / LatencyBadge / AnimatedGauge ...
+  router.dart             # StatefulShellRoute 五分支
+  shared/widgets/         # FloatingAppBar / GlassCard / SpeedRing / LatencyBadge / InsetGroup ...
   features/
-    dashboard/            # 仪表盘（速度环 + 状态面板）
-    nodes/                # 节点列表
+    sources/              # 节点库：订阅聚合 + 本地导入 + 去重
+    dashboard/            # 仪表盘 + 实时结果列表
+    nodes/                # 节点列表（含流媒体解锁标志）
     history/              # 历史会话
-    settings/             # 设置页
+    settings/             # 设置页（分组列表）
 ```
 
 ## 对接真实逻辑
 
 `core/mock_data.dart` 是演示数据源。后续接入时把 `MockNodeRepository` / `MockSpeedTestController` 换成调用 `clash-speedtest` 的 FFI / Platform Channel / 本地服务即可，UI 不需要改。
+FFI / Platform Channel / 本地服务即可，UI 不需要改。

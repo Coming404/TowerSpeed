@@ -16,8 +16,6 @@ class HistoryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
-    final t = AppText.of(context);
-    final top = MediaQuery.of(context).viewPadding.top;
     final bottom = MediaQuery.of(context).viewPadding.bottom;
     final history = MockData.history();
 
@@ -35,18 +33,17 @@ class HistoryScreen extends StatelessWidget {
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
+          FloatingAppBar(
+            title: '历史',
+            subtitle: '$totalRuns 次测速 · 最近 3 天',
+          ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                  AppSpace.xl, top + AppSpace.md, AppSpace.xl, 0),
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpace.xl, AppSpace.sm, AppSpace.xl, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('历史', style: t.display.copyWith(fontSize: 26)),
-                  const SizedBox(height: 2),
-                  Text('$totalRuns 次测速 · 最近 3 天',
-                      style: t.bodySm.copyWith(color: c.textLo)),
-                  const SizedBox(height: AppSpace.lg),
                   // 汇总三联
                   Row(
                     children: [
@@ -84,7 +81,7 @@ class HistoryScreen extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(
                   AppSpace.xl, AppSpace.xl, AppSpace.xl, AppSpace.sm),
-              child: Text('测速记录', style: t.h2),
+              child: Text('测速记录', style: AppText.of(context).h2),
             ),
           ),
           SliverPadding(

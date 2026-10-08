@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/mock_data.dart';
 import '../../core/models/models.dart';
 import '../../shared/widgets/chips.dart';
+import '../../shared/widgets/floating_app_bar.dart';
 import '../../shared/widgets/glass_card.dart';
 import '../../theme/tokens.dart';
 
@@ -57,7 +58,6 @@ class _NodesScreenState extends State<NodesScreen> {
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
     final t = AppText.of(context);
-    final top = MediaQuery.of(context).viewPadding.top;
     final bottom = MediaQuery.of(context).viewPadding.bottom;
     final visible = _visible;
 
@@ -66,19 +66,18 @@ class _NodesScreenState extends State<NodesScreen> {
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          // —— 标题 + 搜索 ——
+          FloatingAppBar(
+            title: '节点',
+            subtitle: '${_nodes.length} 个节点 · 按$_sortLabel排序',
+          ),
+          // —— 搜索 + 筛选 ——
           SliverToBoxAdapter(
             child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                  AppSpace.xl, top + AppSpace.md, AppSpace.xl, 0),
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpace.xl, AppSpace.sm, AppSpace.xl, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('节点', style: t.display.copyWith(fontSize: 26)),
-                  const SizedBox(height: 2),
-                  Text('${_nodes.length} 个节点 · 按${_sortLabel}排序',
-                      style: t.bodySm.copyWith(color: c.textLo)),
-                  const SizedBox(height: AppSpace.lg),
                   // 搜索框
                   GlassCard(
                     padding: const EdgeInsets.symmetric(
@@ -377,6 +376,8 @@ class _NodeTileState extends State<_NodeTile> {
                       LatencyBadge(ms: n.latencyMs),
                       const SizedBox(height: 4),
                       SpeedBadge(mbps: n.downloadMbps),
+                      const SizedBox(height: 4),
+                      _UnlockDots(unlock: n.streaming),
                     ],
                   ),
                   const SizedBox(width: 4),
@@ -504,6 +505,62 @@ class _MiniAction extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 流媒体解锁状态点：N=Netflix Y=YouTube D=Disney+ A=OpenAI
+class _UnlockDots extends StatelessWidget {
+  final StreamingUnlock unlock;
+  const _UnlockDots({required this.unlock});
+
+  @override
+  Widget build(BuildContext context) {
+    if (unlock.isEmpty) {
+      return Text('流媒体未知',
+          style: AppText.of(context)
+              .caption
+              .copyWith(fontSize: 9, color: AppColors.of(context).textLo));
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _dot(context, 'N', unlock.netflix),
+        const SizedBox(width: 3),
+        _dot(context, 'Y', unlock.youtube),
+        const SizedBox(width: 3),
+        _dot(context, 'D', unlock.disneyPlus),
+        const SizedBox(width: 3),
+        _dot(context, 'A', unlock.openai),
+      ],
+    );
+  }
+
+  Widget _dot(BuildContext context, String label, UnlockStatus s) {
+    final c = AppColors.of(context);
+    final (col, txt) = switch (s) {
+      UnlockStatus.unlocked => (c.accent, c.accent),
+      UnlockStatus.blocked => (c.danger, c.danger),
+      UnlockStatus.checking => (c.warn, c.warn),
+      UnlockStatus.unknown => (c.textLo.withOpacity(0.3), c.textLo),
+    };
+    return Container(
+      width: 15,
+      height: 15,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: col.withOpacity(s == UnlockStatus.unlocked ? 0.18 : 0.1),
+        border: Border.all(
+            color: col.withOpacity(
+                s == UnlockStatus.unknown ? 0.4 : 0.6),
+            width: 0.8),
+      ),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 8,
+              fontWeight: FontWeight.w700,
+              color: txt)),
     );
   }
 }

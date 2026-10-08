@@ -8,7 +8,30 @@ class MockData {
 
   static final _rng = Random(42);
 
-  static List<ProxyNode> nodes() => [
+  static List<ProxyNode> nodes() {
+    final unlocks = [
+      // 全开
+      const StreamingUnlock(
+          netflix: UnlockStatus.unlocked,
+          youtube: UnlockStatus.unlocked,
+          disneyPlus: UnlockStatus.unlocked,
+          openai: UnlockStatus.unlocked),
+      // 部分解锁
+      const StreamingUnlock(
+          netflix: UnlockStatus.unlocked,
+          youtube: UnlockStatus.unlocked,
+          disneyPlus: UnlockStatus.blocked,
+          openai: UnlockStatus.unlocked),
+      // 大部分封
+      const StreamingUnlock(
+          netflix: UnlockStatus.blocked,
+          youtube: UnlockStatus.unlocked,
+          disneyPlus: UnlockStatus.blocked,
+          openai: UnlockStatus.blocked),
+      // 未检测
+      const StreamingUnlock(),
+    ];
+    final raw = [
         _n('🇭🇰 香港 HK-01', 'HK-01  IPLC', ProxyType.trojan, '🇭🇰 香港', 'hk01.tower.dev', 443, 142, 28.4),
         _n('🇭🇰 香港 HK-02', 'HK-02  BGP', ProxyType.vmess, '🇭🇰 香港', 'hk02.tower.dev', 443, 158, 22.1),
         _n('🇯🇵 日本 JP-01', 'JP-01  IIJ', ProxyType.trojan, '🇯🇵 日本', 'jp01.tower.dev', 443, 96, 41.7),
@@ -26,6 +49,11 @@ class MockData {
         _n('🇫🇷 法国 FR-01', 'FR-01  OVH', ProxyType.hysteria2, '🇫🇷 法国', 'fr01.tower.dev', 443, 298, 18.6),
         _n('🇨🇦 加拿大 CA-01', 'CA-01  Bell', ProxyType.vless, '🇨🇦 加拿大', 'ca01.tower.dev', 443, 226, 21.3),
       ];
+    for (var i = 0; i < raw.length; i++) {
+      raw[i].streaming = unlocks[i % unlocks.length];
+    }
+    return raw;
+  }
 
   static ProxyNode _n(
     String name,

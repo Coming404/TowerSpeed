@@ -35,6 +35,57 @@ extension ProxyTypeX on ProxyType {
 
 enum NodeStatus { idle, queued, testing, done, failed, skipped }
 
+/// 流媒体解锁检测结果（clash-speedtest 本身不检测，需后端联动外部检测库后回填）。
+enum UnlockStatus { unknown, unlocked, blocked, checking }
+
+class StreamingUnlock {
+  final UnlockStatus netflix;
+  final UnlockStatus youtube;
+  final UnlockStatus disneyPlus;
+  final UnlockStatus openai;
+
+  const StreamingUnlock({
+    this.netflix = UnlockStatus.unknown,
+    this.youtube = UnlockStatus.unknown,
+    this.disneyPlus = UnlockStatus.unknown,
+    this.openai = UnlockStatus.unknown,
+  });
+
+  bool get isEmpty =>
+      netflix == UnlockStatus.unknown &&
+      youtube == UnlockStatus.unknown &&
+      disneyPlus == UnlockStatus.unknown &&
+      openai == UnlockStatus.unknown;
+}
+
+/// 订阅源：一个远程订阅地址或本地导入的 YAML 文件。
+/// clash-speedtest 的 -c 参数接受逗号分隔的多路径混合，这里一项对应一个路径。
+class SubscriptionSource {
+  final String id;
+  final String label;         // 用户起的名字，如 "机场 A"
+  final String location;      // https://… 或本地文件路径
+  final bool isRemote;        // true=订阅 URL，false=本地 YAML
+  bool enabled;               // 本次测速是否使用
+  int? nodeCount;             // 上次拉取/解析到的节点数
+  DateTime? lastFetchedAt;
+  String? lastError;
+
+  SubscriptionSource({
+    required this.id,
+    required this.label,
+    required this.location,
+    required this.isRemote,
+    this.enabled = true,
+    this.nodeCount,
+    this.lastFetchedAt,
+    this.lastError,
+  });
+
+  /// 拼接成 clash-speedtest -c 参数（逗号分隔）。
+  static String toConfigPaths(Iterable<SubscriptionSource> sources) =>
+      sources.where((s) => s.enabled).map((s) => s.location).join(',');
+}
+
 class ProxyNode {
   final String id;
   final String name;
@@ -61,6 +112,8 @@ class ProxyNode {
     this.downloadMbps,
     this.uploadMbps,
     this.packetLoss,
+    this.jitterMs,
+    this.streaming = const StreamingUnlock(),
     this.errorMessage,
   });
 

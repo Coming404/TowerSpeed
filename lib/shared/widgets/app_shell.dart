@@ -11,6 +11,7 @@ class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.shell});
 
   static const _tabs = [
+    _Tab(LucideIcons.library, '节点库'),
     _Tab(LucideIcons.gauge, '测速'),
     _Tab(LucideIcons.network, '节点'),
     _Tab(LucideIcons.history, '历史'),

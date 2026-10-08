@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 /// 调色板 —— 一组完整的颜色语义（light / dark 各一份）。
 /// 用 `AppColors.of(context)` 在 widget 里取当前主题的那一份。
@@ -189,52 +188,69 @@ class AppCurves {
   static const overshoot = Cubic(0.34, 1.56, 0.64, 1);
 }
 
-/// 文字样式 —— Space Grotesk（标题） + IBM Plex Mono（数字）。
+/// 文字样式 —— iOS 风格：标题用系统 SF Pro Display 风格（`fontFamily: '.SF Pro Display'`），
+/// 数字/等宽用 `.SF Mono` 风格（`fontFamily: '.SF Mono'` 不存在时用 system 等宽字体回退）。
 /// 颜色需要 `AppText.of(context)` 获取主题感知版本；
 /// `AppText.raw` 是无色样式，可在外层再染色。
 class AppText {
   final Color hi, mid, lo;
   const AppText._(this.hi, this.mid, this.lo);
 
+  // iOS 系统字体族（在 iOS 上渲染为 SF Pro / SF Mono；其他平台回退到系统默认）
+  static const _displayFont = '.SF Pro Display';
+  static const _textFont = '.SF Pro Text';
+  static const _monoFont = '.SF Mono';
+
   static AppText of(BuildContext context) {
     final c = AppColors.of(context);
     return AppText._(c.textHi, c.textMid, c.textLo);
   }
 
-  TextStyle get display => GoogleFonts.spaceGrotesk(
-        fontSize: 34, fontWeight: FontWeight.w700, color: hi,
-        letterSpacing: -0.5, height: 1.1,
+  TextStyle get display => TextStyle(
+        fontFamily: _displayFont,
+        fontSize: 32, fontWeight: FontWeight.w700, color: hi,
+        letterSpacing: -0.8, height: 1.1,
       );
-  TextStyle get title => GoogleFonts.spaceGrotesk(
-        fontSize: 22, fontWeight: FontWeight.w600, color: hi,
-        letterSpacing: -0.2,
+  TextStyle get title => TextStyle(
+        fontFamily: _displayFont,
+        fontSize: 21, fontWeight: FontWeight.w600, color: hi,
+        letterSpacing: -0.4,
       );
-  TextStyle get h2 => GoogleFonts.spaceGrotesk(
-        fontSize: 17, fontWeight: FontWeight.w600, color: hi,
+  TextStyle get h2 => TextStyle(
+        fontFamily: _textFont,
+        fontSize: 16, fontWeight: FontWeight.w600, color: hi,
       );
-  TextStyle get body => GoogleFonts.spaceGrotesk(
+  TextStyle get body => TextStyle(
+        fontFamily: _textFont,
         fontSize: 14, fontWeight: FontWeight.w400, color: mid, height: 1.45,
       );
-  TextStyle get bodySm => GoogleFonts.spaceGrotesk(
+  TextStyle get bodySm => TextStyle(
+        fontFamily: _textFont,
         fontSize: 12, fontWeight: FontWeight.w400, color: mid,
       );
-  TextStyle get caption => GoogleFonts.spaceGrotesk(
+  TextStyle get caption => TextStyle(
+        fontFamily: _textFont,
         fontSize: 11, fontWeight: FontWeight.w500, color: lo,
-        letterSpacing: 0.4,
+        letterSpacing: 0.3,
       );
-  TextStyle get mono => GoogleFonts.ibmPlexMono(
+  TextStyle get mono => TextStyle(
+        fontFamily: _monoFont,
         fontSize: 14, fontWeight: FontWeight.w500, color: hi,
         fontFeatures: const [FontFeature.tabularFigures()],
       );
-  TextStyle get monoBig => GoogleFonts.ibmPlexMono(
-        fontSize: 48, fontWeight: FontWeight.w700, color: hi, height: 1,
+  TextStyle get monoBig => TextStyle(
+        fontFamily: _monoFont,
+        fontSize: 44, fontWeight: FontWeight.w600, color: hi, height: 1,
+        letterSpacing: -1.2,
         fontFeatures: const [FontFeature.tabularFigures()],
       );
-  TextStyle get monoMetric => GoogleFonts.ibmPlexMono(
-        fontSize: 20, fontWeight: FontWeight.w600, color: hi,
+  TextStyle get monoMetric => TextStyle(
+        fontFamily: _monoFont,
+        fontSize: 19, fontWeight: FontWeight.w600, color: hi,
         fontFeatures: const [FontFeature.tabularFigures()],
       );
-  TextStyle get monoSm => GoogleFonts.ibmPlexMono(
+  TextStyle get monoSm => TextStyle(
+        fontFamily: _monoFont,
         fontSize: 11, fontWeight: FontWeight.w500, color: mid,
         fontFeatures: const [FontFeature.tabularFigures()],
       );

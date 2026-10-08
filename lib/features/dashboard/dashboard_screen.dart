@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,8 +8,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/mock_data.dart';
 import '../../core/models/models.dart';
 import '../../shared/widgets/chips.dart';
+import '../../shared/widgets/floating_app_bar.dart';
 import '../../shared/widgets/glass_card.dart';
-import '../../shared/widgets/sparkline.dart';
 import '../../shared/widgets/speed_ring.dart';
 import '../../theme/tokens.dart';
 
@@ -19,6 +18,22 @@ class DashboardScreen extends StatefulWidget {
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+/// 一条正在测/已测完的实时结果（UI 演示模型）
+class _LiveResult {
+  final String name;
+  final String region;
+  final ProxyType type;
+  NodeStatus status;
+  int? latencyMs;
+  double? downloadMbps;
+  StreamingUnlock streaming;
+  _LiveResult(this.name, this.region, this.type,
+      {this.status = NodeStatus.queued,
+      this.latencyMs,
+      this.downloadMbps,
+      this.streaming = const StreamingUnlock()});
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
@@ -30,20 +45,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _testedCount = 0;
   int _passedCount = 0;
   int _failedCount = 0;
-  String _currentNode = 'JP-01  IIJ';
-  String _currentRegion = '🇯🇵 日本 · NTT';
-  ProxyType _currentType = ProxyType.trojan;
 
-  final Queue<double> _speedHistory = Queue();
-  static const _historyWindow = 90;
+  // 实时结果列表（按下载速度降序）
+  final List<_LiveResult> _liveResults = [];
 
   StreamSubscription<double>? _speedSub;
   StreamSubscription<int>? _latSub;
   Timer? _progressTimer;
 
-  final SpeedTestConfig _config = SpeedTestConfig(
-    subscriptionUrl: 'https://sub.example.com/api/v1/client/subscribe?token=***',
-  );
+  static const _samples = [
+    ('JP-01  IIJ', '🇯🇵 日本 · NTT', ProxyType.trojan),
+    ('HK-02  BGP', '🇭🇰 香港 · Premium', ProxyType.vmess),
+    ('SG-01  Premium', '🇸🇬 新加坡 · IEPL', ProxyType.trojan),
+    ('TW-01  HiNet', '🇹🇼 台湾 · HiNet', ProxyType.vmess),
+    ('US-02  HE', '🇺🇸 美国 · HE', ProxyType.hysteria2),
+    ('KR-01  KT', '🇰🇷 韩国 · KT', ProxyType.trojan),
+  ];
 
   @override
   void dispose() {
@@ -69,44 +86,90 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _testedCount = 0;
       _passedCount = 0;
       _failedCount = 0;
-      _speedHistory.clear();
+      _speed = 0;
+      _latency = 0;
+      _liveResults.clear();
     });
-    _speedSub = MockData.simulatedSpeedStream(mode: _config.mode).listen((v) {
+    // AnimatedList 清空：倒序 remove
+    for (var i = _listKey.currentState != null
+        ? _liveResults.length - 1
+        : -1;
+        i >= 0;
+        i--) {
+      // 已 clear，略；列表重建由 setState 触发
+    }
+    _speedSub =
+        MockData.simulatedSpeedStream(mode: SpeedMode.download).listen((v) {
       if (!mounted || _paused) return;
-      setState(() {
-        _speed = v;
-        _speedHistory.addLast(v);
-        if (_speedHistory.length > _historyWindow) _speedHistory.removeFirst();
-      });
+      setState(() => _speed = v);
     });
     _latSub = MockData.simulatedLatencyStream().listen((v) {
       if (!mounted || _paused) return;
       setState(() => _latency = max(0, v));
     });
     var tick = 0;
-    _progressTimer = Timer.periodic(const Duration(milliseconds: 400), (t) {
+    _progressTimer =
+        Timer.periodic(const Duration(milliseconds: 400), (t) {
       if (!mounted || _paused) return;
       tick++;
       setState(() {
         _progress = (tick / 45).clamp(0.0, 1.0);
-        if (tick % 9 == 0 && _testedCount < 12) {
+        // 每 ~1.2s 完成一个节点
+        if (tick % 3 == 0 && _testedCount < 12) {
           _testedCount++;
-          final fail = tick % 27 == 0;
+          final fail = tick % 12 == 0;
           fail ? _failedCount++ : _passedCount++;
-          const samples = [
-            ('JP-01  IIJ', '🇯🇵 日本 · NTT', ProxyType.trojan),
-            ('HK-02  BGP', '🇭🇰 香港 · Premium', ProxyType.vmess),
-            ('SG-01  Premium', '🇸🇬 新加坡 · IEPL', ProxyType.trojan),
-            ('TW-01  HiNet', '🇹🇼 台湾 · HiNet', ProxyType.vmess),
-          ];
-          final s = samples[tick ~/ 9 % samples.length];
-          _currentNode = s.$1;
-          _currentRegion = s.$2;
-          _currentType = s.$3;
+          final s = _samples[tick ~/ 3 % _samples.length];
+          _insertResult(_LiveResult(
+            s.$1, s.$2, s.$3,
+            status: fail ? NodeStatus.failed : NodeStatus.done,
+            latencyMs: fail ? null : 80 + tick * 4,
+            downloadMbps:
+                fail ? null : max(0.5, 40 - tick * 1.3 + (tick % 5) * 3),
+            streaming: _demoUnlock(tick),
+          ));
         }
         if (_progress >= 1.0) _stop(finished: true);
       });
     });
+  }
+
+  StreamingUnlock _demoUnlock(int tick) {
+    final r = tick % 4;
+    return switch (r) {
+      0 => const StreamingUnlock(
+          netflix: UnlockStatus.unlocked,
+          youtube: UnlockStatus.unlocked,
+          disneyPlus: UnlockStatus.unlocked,
+          openai: UnlockStatus.unlocked),
+      1 => const StreamingUnlock(
+          netflix: UnlockStatus.unlocked,
+          youtube: UnlockStatus.unlocked,
+          disneyPlus: UnlockStatus.blocked,
+          openai: UnlockStatus.unlocked),
+      2 => const StreamingUnlock(
+          netflix: UnlockStatus.blocked,
+          youtube: UnlockStatus.unlocked,
+          disneyPlus: UnlockStatus.blocked,
+          openai: UnlockStatus.blocked),
+      _ => const StreamingUnlock(),
+    };
+  }
+
+  /// 按下载速度降序插入（TUI 默认排序：下载带宽越高越靠前）
+  void _insertResult(_LiveResult r) {
+    var idx = _liveResults.length;
+    for (var i = 0; i < _liveResults.length; i++) {
+      final cur = _liveResults[i].downloadMbps ?? -1;
+      final next = r.downloadMbps ?? -1;
+      if (next > cur) {
+        idx = i;
+        break;
+      }
+    }
+    _liveResults.insert(idx, r);
+    _listKey.currentState?.insertItem(idx,
+        duration: const Duration(milliseconds: 280));
   }
 
   void _stop({bool finished = false}) {
@@ -127,162 +190,110 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
-    final top = MediaQuery.of(context).viewPadding.top;
     final bottom = MediaQuery.of(context).viewPadding.bottom;
+
     return Scaffold(
       backgroundColor: c.bg,
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                  AppSpace.xl, top + AppSpace.md, AppSpace.xl, 0),
-              child: _Header(running: _running, tested: _testedCount, total: 16),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.only(top: AppSpace.xl),
-              child: Center(
-                child: SpeedRing(
-                  mbps: _speed,
-                  maxMbps: 80,
-                  size: 260,
-                  active: _running && !_paused,
-                  caption: _running
-                      ? (_paused
-                          ? '已暂停'
-                          : '测速中 · ${(_progress * 100).toInt()}%')
-                      : (_progress >= 1.0 ? '已完成' : '点击开始'),
-                )
-                    .animate()
-                    .fadeIn(duration: 500.ms, curve: AppCurves.enter)
-                    .scale(
-                      begin: const Offset(0.92, 0.92),
-                      end: const Offset(1, 1),
-                      duration: 500.ms,
-                      curve: AppCurves.enter,
-                    ),
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  AppSpace.xl, AppSpace.md, AppSpace.xl, 0),
-              child: GlassCard(
-                padding: const EdgeInsets.all(AppSpace.md),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(LucideIcons.activity, size: 14),
-                        const SizedBox(width: 6),
-                        _Caption('实时速率'),
-                        const Spacer(),
-                        if (_running && !_paused)
-                          _PulsingDot(color: c.accent)
-                        else
-                          _Caption('—'),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpace.sm),
-                    SpeedSparkline(
-                        points: _speedHistory.toList(), height: 56),
-                  ],
-                ),
-              ).animate().fadeIn(delay: 100.ms, duration: 420.ms).slideY(
-                  begin: 0.06, end: 0, curve: AppCurves.enter),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  AppSpace.xl, AppSpace.md, AppSpace.xl, 0),
-              child: _MetricGrid(
-                latency: _latency,
-                passed: _passedCount,
-                failed: _failedCount,
-                progress: _progress,
-              ).animate().fadeIn(delay: 180.ms, duration: 420.ms).slideY(
-                  begin: 0.08, end: 0, curve: AppCurves.enter),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  AppSpace.xl, AppSpace.md, AppSpace.xl, 0),
-              child: GlassCard(
-                onTap: () => HapticFeedback.selectionClick(),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: c.accent.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(AppRadius.sm),
+          FloatingAppBar(
+            title: 'TowerSpeed',
+            subtitle: _running
+                ? '测速中 · $_testedCount/12'
+                : (_progress >= 1 ? '上次已完成' : '准备就绪'),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _IconBtn(
+                  icon: LucideIcons.bell,
+                  onTap: () =>
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          behavior: SnackBarBehavior.floating,
+                          content: Text('暂无新通知'),
+                          duration: Duration(seconds: 1),
+                        ),
                       ),
-                      child: Icon(LucideIcons.server,
-                          color: c.accent, size: 20),
-                    ),
-                    const SizedBox(width: AppSpace.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _H2(_currentNode),
-                          const SizedBox(height: 2),
-                          _BodySm(_currentRegion),
-                        ],
-                      ),
-                    ),
-                    TypeBadge(type: _currentType),
-                    const SizedBox(width: AppSpace.sm),
-                    const Icon(LucideIcons.chevronRight, size: 18),
-                  ],
                 ),
-              ).animate().fadeIn(delay: 260.ms, duration: 420.ms).slideY(
-                  begin: 0.08, end: 0, curve: AppCurves.enter),
+              ],
             ),
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                  AppSpace.xl, AppSpace.xl, AppSpace.xl, 96 + bottom),
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpace.xl, AppSpace.md, AppSpace.xl, 0),
               child: Column(
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(3),
-                    child: LinearProgressIndicator(
-                      value: _running || _progress >= 1 ? _progress : 0,
-                      minHeight: 6,
-                      backgroundColor: c.isDark
-                          ? c.surfaceGlass
-                          : c.surfaceElev,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        _progress >= 1.0 ? c.accent : c.info,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
+                  // —— 上行：小仪表盘 + 实时速率 ——
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _MonoSm(
-                        _running
-                            ? '$_testedCount / 16 · ${(_progress * 100).toStringAsFixed(0)}%'
-                            : (_progress >= 1
-                                ? '16 / 16 · 完成'
-                                : '尚未开始'),
+                      // 左：小号仪表盘
+                      SpeedRing(
+                        mbps: _speed,
+                        maxMbps: 80,
+                        size: 150,
+                        active: _running && !_paused,
+                        caption: _running
+                            ? (_paused
+                                ? '已暂停'
+                                : '${(_progress * 100).toInt()}%')
+                            : (_progress >= 1.0
+                                ? '已完成'
+                                : '待开始'),
+                      ).animate().fadeIn(duration: 300.ms),
+                      const SizedBox(width: AppSpace.md),
+                      // 右：实时速率 + 延迟
+                      Expanded(
+                        child: Column(
+                          children: [
+                            _MiniStat(
+                              icon: LucideIcons.activity,
+                              label: '实时速率',
+                              value: _running && !_paused
+                                  ? _speed.toStringAsFixed(1)
+                                  : '—',
+                              unit: 'MB/s',
+                              color: c.speedColor(_speed),
+                              live: _running && !_paused,
+                            ),
+                            const SizedBox(height: AppSpace.sm),
+                            _MiniStat(
+                              icon: LucideIcons.zap,
+                              label: '延迟',
+                              value: _latency == 0
+                                  ? '—'
+                                  : '$_latency',
+                              unit: 'ms',
+                              color: c.latencyColor(
+                                  _latency == 0 ? null : _latency),
+                            ),
+                            const SizedBox(height: AppSpace.sm),
+                            _MiniStat(
+                              icon: LucideIcons.badgeCheck,
+                              label: '通过 / 失败',
+                              value: '$_passedCount/$_failedCount',
+                              unit: '',
+                              color: _failedCount > 0
+                                  ? c.danger
+                                  : c.accent,
+                            ),
+                          ],
+                        ).animate().fadeIn(
+                            delay: 80.ms, duration: 300.ms),
                       ),
-                      if (_running || _progress >= 1)
-                        _MonoSm('已通过 $_passedCount · 失败 $_failedCount'),
                     ],
                   ),
-                  const SizedBox(height: AppSpace.xl),
+                  const SizedBox(height: AppSpace.md),
+                  // —— 进度条 ——
+                  _ProgressBar(
+                    progress: _progress,
+                    running: _running,
+                    tested: _testedCount,
+                  ),
+                  const SizedBox(height: AppSpace.md),
+                  // —— 控制按钮 ——
                   _CtaButton(
                     running: _running,
                     paused: _paused,
@@ -294,227 +305,155 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
           ),
+          // —— 实时结果列表 ——
+          if (_liveResults.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpace.xl, AppSpace.lg, AppSpace.xl, AppSpace.xs),
+                child: Row(
+                  children: [
+                    Text('实时结果',
+                        style: AppText.of(context).caption.copyWith(
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.8)),
+                    const SizedBox(width: 6),
+                    _PulsingDot(
+                        color: c.accent, size: 6,
+                        visible: _running && !_paused),
+                    const Spacer(),
+                    Text('按速度排序',
+                        style: AppText.of(context).monoSm
+                            .copyWith(color: c.textLo, fontSize: 10)),
+                  ],
+                ),
+              ),
+            ),
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+                AppSpace.xl, 0, AppSpace.xl, 110 + bottom),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, i) {
+                  final r = _liveResults[i];
+                  return _ResultTile(result: r)
+                      .animate(key: ValueKey(r.name))
+                      .fadeIn(duration: 240.ms, curve: Curves.easeOutCubic)
+                      .slideY(begin: -0.15, end: 0, curve: Curves.easeOutCubic);
+                },
+                childCount: _liveResults.length,
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-// —— 文字便捷件（主题感知） ——
-class _Caption extends StatelessWidget {
-  final String s;
-  const _Caption(this.s);
-  @override
-  Widget build(BuildContext context) =>
-      Text(s, style: AppText.of(context).caption);
-}
+// —— 小组件 ——
 
-class _BodySm extends StatelessWidget {
-  final String s;
-  const _BodySm(this.s);
-  @override
-  Widget build(BuildContext context) =>
-      Text(s, style: AppText.of(context).bodySm);
-}
-
-class _H2 extends StatelessWidget {
-  final String s;
-  const _H2(this.s);
-  @override
-  Widget build(BuildContext context) =>
-      Text(s, style: AppText.of(context).h2);
-}
-
-class _MonoSm extends StatelessWidget {
-  final String s;
-  const _MonoSm(this.s);
-  @override
-  Widget build(BuildContext context) =>
-      Text(s, style: AppText.of(context).monoSm);
-}
-
-class _Header extends StatelessWidget {
-  final bool running;
-  final int tested;
-  final int total;
-  const _Header(
-      {required this.running, required this.tested, required this.total});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = AppColors.of(context);
-    final t = AppText.of(context);
-    return Row(
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('TowerSpeed', style: t.display.copyWith(fontSize: 26)),
-            const SizedBox(height: 2),
-            Text(
-              running ? '正在测速 $tested/$total' : '准备就绪',
-              style: t.bodySm.copyWith(
-                color: running ? c.accent : c.textLo,
-              ),
-            ),
-          ],
-        ),
-        const Spacer(),
-        _IconGlass(
-          icon: LucideIcons.cloudDownload,
-          tooltip: '更新订阅',
-          onTap: () {
-            HapticFeedback.selectionClick();
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                behavior: SnackBarBehavior.floating,
-                content: Text('正在从远端拉取最新节点列表…'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-          },
-        ),
-        const SizedBox(width: AppSpace.sm),
-        _IconGlass(
-          icon: LucideIcons.bell,
-          tooltip: '通知',
-          onTap: () => HapticFeedback.selectionClick(),
-        ),
-      ],
-    );
-  }
-}
-
-class _IconGlass extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onTap;
-  const _IconGlass(
-      {required this.icon, required this.tooltip, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: GlassCard(
-        padding: const EdgeInsets.all(10),
-        borderRadius: AppRadius.sm,
-        onTap: onTap,
-        child: Icon(icon, size: 18),
-      ),
-    );
-  }
-}
-
-class _MetricGrid extends StatelessWidget {
-  final int latency;
-  final int passed;
-  final int failed;
-  final double progress;
-  const _MetricGrid({
-    required this.latency,
-    required this.passed,
-    required this.failed,
-    required this.progress,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = AppColors.of(context);
-    final items = [
-      _Metric(
-        icon: LucideIcons.zap,
-        label: '延迟',
-        value: latency == 0 ? '—' : '$latency',
-        unit: 'ms',
-        color: c.latencyColor(latency == 0 ? null : latency),
-      ),
-      _Metric(
-        icon: LucideIcons.arrowDownToLine,
-        label: '已测试',
-        value: '${progress > 0 ? (progress * 16).round() : 0}',
-        unit: '/ 16',
-        color: c.info,
-      ),
-      _Metric(
-        icon: LucideIcons.badgeCheck,
-        label: '通过',
-        value: '$passed',
-        unit: '',
-        color: c.accent,
-      ),
-      _Metric(
-        icon: LucideIcons.circleAlert,
-        label: '失败',
-        value: '$failed',
-        unit: '',
-        color: c.danger,
-      ),
-    ];
-    return GridView.count(
-      crossAxisCount: 4,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: AppSpace.sm,
-      crossAxisSpacing: AppSpace.sm,
-      childAspectRatio: 0.92,
-      children: [
-        for (var i = 0; i < items.length; i++)
-          items[i]
-              .animate()
-              .fadeIn(delay: (i * 55).ms, duration: 320.ms)
-              .slideY(begin: 0.12, end: 0, curve: AppCurves.enter),
-      ],
-    );
-  }
-}
-
-class _Metric extends StatelessWidget {
+class _MiniStat extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
   final String unit;
   final Color color;
-  const _Metric({
+  final bool live;
+  const _MiniStat({
     required this.icon,
     required this.label,
     required this.value,
     required this.unit,
     required this.color,
+    this.live = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final t = AppText.of(context);
     final c = AppColors.of(context);
+    final t = AppText.of(context);
     return GlassCard(
       padding: const EdgeInsets.symmetric(
-          horizontal: AppSpace.sm, vertical: AppSpace.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          horizontal: AppSpace.md, vertical: AppSpace.sm),
+      borderRadius: AppRadius.sm,
+      child: Row(
         children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(height: AppSpace.xs),
-          Text(label, style: t.caption),
-          const SizedBox(height: 2),
-          RichText(
-            text: TextSpan(
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextSpan(
-                  text: value,
-                  style: t.monoMetric.copyWith(color: color),
+                Text(label, style: t.caption),
+                const SizedBox(height: 1),
+                RichText(
+                  text: TextSpan(children: [
+                    TextSpan(
+                        text: value,
+                        style: t.monoMetric
+                            .copyWith(color: color, fontSize: 18)),
+                    if (unit.isNotEmpty)
+                      TextSpan(
+                          text: ' $unit',
+                          style: t.monoSm
+                              .copyWith(color: c.textLo, fontSize: 10)),
+                  ]),
                 ),
-                if (unit.isNotEmpty)
-                  TextSpan(
-                    text: ' $unit',
-                    style: t.monoSm.copyWith(color: c.textLo),
-                  ),
               ],
             ),
           ),
+          if (live) _PulsingDot(color: color, size: 7, visible: true),
         ],
       ),
+    );
+  }
+}
+
+class _ProgressBar extends StatelessWidget {
+  final double progress;
+  final bool running;
+  final int tested;
+  const _ProgressBar(
+      {required this.progress, required this.running, required this.tested});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    final t = AppText.of(context);
+    return Column(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: LinearProgressIndicator(
+            value: running || progress >= 1 ? progress : 0,
+            minHeight: 5,
+            backgroundColor:
+                c.isDark ? c.surfaceGlass : c.surfaceElev,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              progress >= 1.0 ? c.accent : c.info,
+            ),
+          ),
+        ),
+        const SizedBox(height: 5),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              running
+                  ? '$tested / 12 · ${(progress * 100).toStringAsFixed(0)}%'
+                  : (progress >= 1 ? '12 / 12 · 完成' : '等待开始'),
+              style: t.monoSm.copyWith(color: c.textLo, fontSize: 10),
+            ),
+            if (running || progress >= 1)
+              Text(
+                '已通过 $tested',
+                style:
+                    t.monoSm.copyWith(color: c.textLo, fontSize: 10),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -538,11 +477,12 @@ class _CtaButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
     return AnimatedSwitcher(
-      duration: AppDurations.med,
-      switchInCurve: AppCurves.enter,
-      switchOutCurve: AppCurves.exit,
+      duration: const Duration(milliseconds: 220),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
       transitionBuilder: (child, anim) => ScaleTransition(
-        scale: CurvedAnimation(parent: anim, curve: AppCurves.overshoot),
+        scale: Tween(begin: 0.95, end: 1.0).animate(
+            CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
         child: FadeTransition(opacity: anim, child: child),
       ),
       child: running
@@ -552,7 +492,9 @@ class _CtaButton extends StatelessWidget {
                 Expanded(
                   child: _BigButton(
                     label: paused ? '继续' : '暂停',
-                    icon: paused ? LucideIcons.play : LucideIcons.pause,
+                    icon: paused
+                        ? LucideIcons.play
+                        : LucideIcons.pause,
                     color: c.warn,
                     onTap: onPause,
                   ),
@@ -607,10 +549,10 @@ class _BigButtonState extends State<_BigButton>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 100),
+    duration: const Duration(milliseconds: 90),
+    value: 1.0,
     lowerBound: 0.0,
     upperBound: 1.0,
-    value: 1.0,
   );
 
   @override
@@ -627,27 +569,28 @@ class _BigButtonState extends State<_BigButton>
       onTapDown: (_) {
         HapticFeedback.selectionClick();
         _c.animateTo(0.0,
-            duration: const Duration(milliseconds: 80), curve: Curves.easeOut);
+            duration: const Duration(milliseconds: 70),
+            curve: Curves.easeOut);
       },
       onTapUp: (_) {
         _c.animateTo(1.0,
-            duration: const Duration(milliseconds: 300),
-            curve: AppCurves.overshoot);
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic);
         widget.onTap();
       },
       onTapCancel: () => _c.animateTo(1.0,
-          duration: const Duration(milliseconds: 200), curve: Curves.easeOut),
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut),
       child: AnimatedBuilder(
         animation: _c,
-        builder: (_, child) =>
-            Transform.scale(scale: 0.96 + 0.04 * _c.value, child: child),
+        builder: (_, child) => Transform.scale(
+            scale: 0.97 + 0.03 * _c.value, child: child),
         child: Container(
-          height: 54,
+          height: 48,
           width: widget.fullWidth ? double.infinity : null,
           decoration: BoxDecoration(
-            color: widget.outlined
-                ? widget.color.withOpacity(0.08)
-                : widget.color,
+            color:
+                widget.outlined ? widget.color.withOpacity(0.08) : widget.color,
             borderRadius: BorderRadius.circular(AppRadius.md),
             border: Border.all(
               color: widget.outlined
@@ -659,9 +602,9 @@ class _BigButtonState extends State<_BigButton>
                 ? null
                 : [
                     BoxShadow(
-                      color: widget.color.withOpacity(0.28),
-                      blurRadius: 18,
-                      offset: const Offset(0, 6),
+                      color: widget.color.withOpacity(0.25),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
                     ),
                   ],
           ),
@@ -669,19 +612,16 @@ class _BigButtonState extends State<_BigButton>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(widget.icon,
-                  size: 18,
-                  color:
-                      widget.outlined ? widget.color : c.textInverse),
-              const SizedBox(width: 8),
-              Text(
-                widget.label,
-                style: t.h2.copyWith(
-                  color:
-                      widget.outlined ? widget.color : c.textInverse,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
-                ),
-              ),
+                  size: 17,
+                  color: widget.outlined ? widget.color : c.textInverse),
+              const SizedBox(width: 7),
+              Text(widget.label,
+                  style: t.h2.copyWith(
+                      color: widget.outlined
+                          ? widget.color
+                          : c.textInverse,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15)),
             ],
           ),
         ),
@@ -690,9 +630,142 @@ class _BigButtonState extends State<_BigButton>
   }
 }
 
+class _ResultTile extends StatelessWidget {
+  final _LiveResult result;
+  const _ResultTile({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    final t = AppText.of(context);
+    final r = result;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.sm),
+      child: GlassCard(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpace.md, vertical: AppSpace.sm),
+        borderRadius: AppRadius.sm,
+        child: Row(
+          children: [
+            StatusDot(status: r.status),
+            const SizedBox(width: AppSpace.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(r.name,
+                      style: t.body.copyWith(
+                          color: c.textHi, fontWeight: FontWeight.w500),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 2),
+                  Text(r.region, style: t.caption),
+                ],
+              ),
+            ),
+            // 流媒体标志
+            _UnlockDots(unlock: r.streaming),
+            const SizedBox(width: AppSpace.sm),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                LatencyBadge(ms: r.latencyMs, compact: true),
+                const SizedBox(height: 3),
+                SpeedBadge(mbps: r.downloadMbps),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 流媒体解锁状态点：N=Netflix Y=YouTube D=Disney+ A=OpenAI
+class _UnlockDots extends StatelessWidget {
+  final StreamingUnlock unlock;
+  const _UnlockDots({required this.unlock});
+
+  @override
+  Widget build(BuildContext context) {
+    if (unlock.isEmpty) return const SizedBox.shrink();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _dot('N', unlock.netflix),
+        const SizedBox(width: 3),
+        _dot('Y', unlock.youtube),
+        const SizedBox(width: 3),
+        _dot('D', unlock.disneyPlus),
+        const SizedBox(width: 3),
+        _dot('A', unlock.openai),
+      ],
+    );
+  }
+
+  Widget _dot(String label, UnlockStatus s) {
+    return Builder(builder: (context) {
+      final c = AppColors.of(context);
+      final (col, txt) = switch (s) {
+        UnlockStatus.unlocked => (c.accent, c.accent),
+        UnlockStatus.blocked => (c.danger, c.danger),
+        UnlockStatus.checking => (c.warn, c.warn),
+        UnlockStatus.unknown => (c.textLo.withOpacity(0.3), c.textLo),
+      };
+      return Container(
+        width: 16,
+        height: 16,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: col.withOpacity(s == UnlockStatus.unlocked ? 0.18 : 0.1),
+          border: Border.all(
+              color: col.withOpacity(
+                  s == UnlockStatus.unknown ? 0.4 : 0.6),
+              width: 0.8),
+        ),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 8.5,
+                fontWeight: FontWeight.w700,
+                color: txt)),
+      );
+    });
+  }
+}
+
+class _IconBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _IconBtn({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: c.surfaceGlass,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: c.borderStrong, width: 0.8),
+        ),
+        child: Icon(icon, size: 17, color: c.textMid),
+      ),
+    );
+  }
+}
+
 class _PulsingDot extends StatefulWidget {
   final Color color;
-  const _PulsingDot({required this.color});
+  final double size;
+  final bool visible;
+  const _PulsingDot(
+      {required this.color, this.size = 8, this.visible = true});
 
   @override
   State<_PulsingDot> createState() => _PulsingDotState();
@@ -702,7 +775,7 @@ class _PulsingDotState extends State<_PulsingDot>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1400),
+    duration: const Duration(milliseconds: 1200),
   )..repeat(reverse: true);
 
   @override
@@ -713,21 +786,31 @@ class _PulsingDotState extends State<_PulsingDot>
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.visible) {
+      return Container(
+        width: widget.size,
+        height: widget.size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: widget.color.withOpacity(0.3),
+        ),
+      );
+    }
     return AnimatedBuilder(
       animation: _c,
       builder: (_, __) {
         final t = _c.value;
         return Container(
-          width: 10,
-          height: 10,
+          width: widget.size,
+          height: widget.size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: widget.color.withOpacity(0.4 + 0.6 * t),
+            color: widget.color.withOpacity(0.5 + 0.5 * t),
             boxShadow: [
               BoxShadow(
-                color: widget.color.withOpacity(0.5 * t),
-                blurRadius: 10 + 4 * t,
-                spreadRadius: 1 + 2 * t,
+                color: widget.color.withOpacity(0.4 * t),
+                blurRadius: 6 + 4 * t,
+                spreadRadius: t,
               ),
             ],
           ),
