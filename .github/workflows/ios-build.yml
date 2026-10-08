@@ -110,7 +110,7 @@ jobs:
           retention-days: 30
 
       - name: Upload to TestFlight (optional)
-        if: ${{ secrets.APP_STORE_CONNECT_KEY_ID != '' }}
+        if: env.ASC_KEY_ID != ''
         env:
           ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
