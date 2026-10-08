@@ -11,19 +11,23 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-  go_router: ^14.6.2
+  # go_router 17.x 稳定；18+ 迁到 material_ui 新包，先稳一版
+  go_router: ^17.5.0
+  # shadcn_ui 0.57.x 起 intl 兼容 0.19-1.0；组件 API 是 ShadApp.router
   shadcn_ui: ^0.57.1
-  lucide_icons_flutter: ^1.2.0
-  flutter_animate: ^4.5.0
-  google_fonts: ^6.2.1
-  fl_chart: ^0.69.0
+  # shadcn_ui 0.57 依赖 lucide_icons_flutter ^3.0.0
+  lucide_icons_flutter: ^3.1.22
+  flutter_animate: ^4.5.2
+  # google_fonts 9.x 起 API 是 GoogleFonts.xxx()，返回 TextStyle
+  google_fonts: ^9.0.0
+  fl_chart: ^1.2.0
   intl: ^0.20.2
   collection: ^1.18.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0
+  flutter_lints: ^6.0.0
 
 flutter:
   uses-material-design: true
