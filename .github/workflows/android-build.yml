@@ -25,7 +25,6 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: ${{ env.FLUTTER_CHANNEL }}
           cache: true
-          architecture: arm64
       - name: Ensure Android project exists
         run: |
           if [ ! -f android/app/build.gradle ]; then
