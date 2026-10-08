@@ -1,0 +1,40 @@
+name: Android Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: '3.32.0'
+  FLUTTER_CHANNEL: 'stable'
+
+jobs:
+  apk:
+    name: Android APK (debug-signed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+          architecture: arm64
+      - name: Ensure Android project exists
+        run: |
+          if [ ! -f android/app/build.gradle ]; then
+            flutter create --org com.towerspeed --project-name tower_speed --platforms android .
+          fi
+      - run: flutter pub get
+      - run: flutter build apk --debug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TowerSpeed-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 14

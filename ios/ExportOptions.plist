@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- 用 development 模式导出：不要 bitcode、不要符号表、不要 thinning -->
+	<key>method</key>
+	<string>development</string>
+	<key>teamID</key>
+	<string>YOUR_TEAM_ID</string>
+	<key>compileBitcode</key>
+	<false/>
+	<key>stripSwiftSymbols</key>
+	<true/>
+	<key>thinning</key>
+	<string>&lt;none&gt;</string>
+	<!-- 巨魔用户：把 IPA 直接 AirDrop / 通过 TrollStore 打开即可，
+	     无需有效签名；开发证书签名只是为了能装上设备。 -->
+</dict>
+</plist>
