@@ -15,7 +15,7 @@ on:
         options: [release, debug, profile]
 
 env:
-  FLUTTER_VERSION: '3.32.0'
+  FLUTTER_VERSION: '3.24.5'
   FLUTTER_CHANNEL: 'stable'
 
 jobs:
@@ -44,7 +44,6 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: ${{ env.FLUTTER_CHANNEL }}
           cache: true
-          architecture: arm64
       - run: flutter pub get
       - name: Build iOS (unsigned)
         run: flutter build ios --release --no-codesign
@@ -70,7 +69,6 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: ${{ env.FLUTTER_CHANNEL }}
           cache: true
-          architecture: arm64
 
       - name: Install Apple certificate & provisioning profile
         env:
