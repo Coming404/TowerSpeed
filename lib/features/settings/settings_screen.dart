@@ -374,7 +374,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           InsetRow(
             leading: ColoredIcon(
-                icon: LucideIcons.github, color: c.textMid),
+                icon: LucideIcons.code, color: c.textMid),
             title: const Text('开源核心'),
             subtitle:
                 const Text('github.com/faceair/clash-speedtest'),

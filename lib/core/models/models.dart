@@ -98,6 +98,8 @@ class ProxyNode {
   double? downloadMbps;
   double? uploadMbps;
   double? packetLoss;       // 0-100
+  int? jitterMs;            // 抖动（core 输出 Result.jitter）
+  StreamingUnlock streaming; // 流媒体解锁（需后端联动检测，未知为 unknown）
   String? errorMessage;
 
   ProxyNode({

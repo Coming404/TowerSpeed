@@ -90,14 +90,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _latency = 0;
       _liveResults.clear();
     });
-    // AnimatedList 清空：倒序 remove
-    for (var i = _listKey.currentState != null
-        ? _liveResults.length - 1
-        : -1;
-        i >= 0;
-        i--) {
-      // 已 clear，略；列表重建由 setState 触发
-    }
     _speedSub =
         MockData.simulatedSpeedStream(mode: SpeedMode.download).listen((v) {
       if (!mounted || _paused) return;
@@ -168,8 +160,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     }
     _liveResults.insert(idx, r);
-    _listKey.currentState?.insertItem(idx,
-        duration: const Duration(milliseconds: 280));
   }
 
   void _stop({bool finished = false}) {

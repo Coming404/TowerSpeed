@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/mock_data.dart';
 import '../../core/models/models.dart';
 import '../../shared/widgets/chips.dart';
+import '../../shared/widgets/floating_app_bar.dart';
 import '../../shared/widgets/glass_card.dart';
 import '../../theme/tokens.dart';
 
